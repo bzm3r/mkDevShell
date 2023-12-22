@@ -1,10 +1,19 @@
-{ lib, shellInit, ... }:
+{ lib, shellInit, ... }@inputAttrs:
 let
   escapeShellArg = lib.strings.escapeShellArg;
 
   doubleQuote = x: ''"${x}"'';
 
   replaceComment = label: action: "# ${action} ${label}";
+
+  bashIfThenElse = { conditionFlag, label, thenExport, elseExport }: ''
+    if [ ${conditionFlag} "$''${${label}}" ]
+      then
+        export ${label}=${thenExport}
+      else
+        export ${label}=${elseExport}
+      fi
+  '';
   fixActions = {
     delete = label: {
       find = "export ${label}(.*)$";
@@ -16,13 +25,31 @@ let
       find = "export ${label}=${doubleQuote "(.+)"}$";
       replace = ''
         ${replaceComment label "prepended"}
-        export ${label}=${doubleQuote ("$$" + label + ":$1")}'';
+        ${bashIfThenElse {
+          inherit label;
+          conditionFlag = "-z";
+          thenExport = doubleQuote "$1";
+          elseExport = doubleQuote "$\$${label}:$1";
+        }}
+      '';
     };
     modify = modifyWith: label: {
       find = "export ${label}=${doubleQuote "(.+)"}$";
       replace = ''
         ${replaceComment label "modified"}
         export ${label}=${doubleQuote modifyWith}'';
+    };
+    append = label: {
+      find = "export ${label}=${doubleQuote "(.+)"}$";
+      replace = ''
+        ${replaceComment label "appended"}
+        ${bashIfThenElse {
+          inherit label;
+          conditionFlag = "-z";
+          thenExport = doubleQuote "$1";
+          elseExport = (doubleQuote "$1:$\$${label}");
+        }}
+      '';
     };
   };
 
@@ -94,7 +121,8 @@ let
 in builtins.concatStringsSep "\n" ([ (sdCmd "declare -x" "export") ]
   ++ (map (fixCmd fixActions.delete) (drvAttrs ++ builderVars))
   ++ (map (fixCmd fixActions.prepend) pathLikes)
+  ++ (map (fixCmd fixActions.append) [ "name" ])
   ++ (map (fixCmd (fixActions.modify "/run/user/$$UID")) tempDirs)
-  ++ [ (fixCmd (fixActions.modify "$$(($$SHLVL - 1))") SHLVL) ])
+  ++ [ (fixCmd (fixActions.modify "$$((SHLVL - 1))") SHLVL) ])
 #++ (map (fixCmd replaceRegex.delete) (drvAttrs ++ builderVars))
 #++ (map (fixCmd replaceRegex.prepend) pathLikes)

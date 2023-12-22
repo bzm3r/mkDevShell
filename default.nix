@@ -1,30 +1,13 @@
-{ lib, buildEnv, stdenv, writeTextFile }:
+{ pkgs, lib, stdenv ? pkgs.stdenvNoCC, extraNativeBuildInputs, ... }:
 # mkDevShell is closely based on the structure of mkShell
 # * https://stackoverflow.com/a/71112117/3486684
 {
 # ===========================================
 # mkShell Attributes:
 # https://nixos.org/manual/nixpkgs/unstable/#sec-pkgs-mkShell-attributes
-# ===========================================
-#
-# List of executable packages to add to the nix-shell environment.
-packages ? [ ]
-  #
-  # -----------------------
-  #
-  # Add build dependencies of the listed derivations to the nix-shell environment.
-, inputsFrom ? [ ]
-  #
-  # -----------------------
-  # Bash statements that are executed by nix-shell.
-  #, shellHook ? ""
-  # -----------------------
-  # ===========================================
-  # The following are attributes inherited by mkShell from mkDerivation
-  # ===========================================
-  #
-  # Set the name of the derivation. (Not optional)
-, name, meta, shellInitialization, ... }@inputAttrs:
+# ===========================================.
+packages ? [ ], inputsFrom ? [ ], phases ? [ "buildPhase" "installPhase" ], name
+, meta, shellInitialization, shellCleanUp, ... }@inputAttrs:
 let
   # deduplicates builtInputs across: 1) any corresponding buildInputs in
   # inputAttrs (the inputs to this `mkDevShell` function), 2) all the
@@ -38,8 +21,8 @@ let
       # lib.subtractLists: subtracts first list from second
       # https://nixos.org/manual/nixpkgs/unstable/
       lib.subtractLists
-      # first list is a list derivations whose build inputs will be included
-      # in the final dev shell's environment.
+      # first list is a list derivations whose build inputs will be included in
+      # the final dev shell's environment.
       inputsFrom (
         # flattens nested lists into an un-nested one
         lib.flatten
@@ -58,10 +41,23 @@ let
     "propagatedNativeBuildInputs"
     "shellHook"
   ];
-  shellInitScript = "${name}-shell-init";
+  shellInitScript = "shell-init";
   shellInvokeScript = "${name}-shell";
-in stdenv.mkDerivation ({
-  inherit name meta;
+  shellCleanScript = "${name}-shell-clean";
+
+  # Minimal stdenv based on: https://github.com/viperML/mkshell-minimal
+  miniStdEnv = stdenv.override {
+    inherit extraNativeBuildInputs;
+    cc = null;
+    preHook = "";
+    allowedRequisites = null;
+    initialPath = [ pkgs.coreutils ];
+    shell = pkgs.lib.getExe pkgs.bash;
+  };
+  IN_NIX_SHELL = "impure"; # these custom shells are impure by construction
+in miniStdEnv.mkDerivation ({
+  inherit name meta phases IN_NIX_SHELL;
+
   buildInputs = mergeBuildInputs "buildInputs";
   nativeBuildInputs = packages ++ (mergeBuildInputs "nativeBuildInputs");
   propagatedBuildInputs = mergeBuildInputs "propagatedBuildInputs";
@@ -69,8 +65,8 @@ in stdenv.mkDerivation ({
   preferLocalBuild = true;
 
   buildPhase = let
-    # a concatenation of the various shell hookzs that are required by
-    # the buildInputs that go into making up the shell environment
+    # a concatenation of the various shell hookzs that are required by the
+    # buildInputs that go into making up the shell environment
     shellHooks = lib.concatStringsSep "\n"
       (lib.catAttrs "shellHook" (lib.reverseList inputsFrom ++ [ inputAttrs ]));
     shellInitBody = ''
@@ -95,16 +91,17 @@ in stdenv.mkDerivation ({
 
     echo "${shellInitBody}" >> ${shellInitScript}
     echo "${startShell}" >> ${shellInvokeScript}
+    echo "${shellCleanUp}" >> ${shellCleanScript}
+
     runHook postBuild
   '';
 
   installPhase = ''
     runHook preInstall
-    # echo "PWD: $PWD"
-    # echo "out: $out"
-    # echo "ls: $(ls)"
+    # echo "PWD: $PWD" echo "out: $out" echo "ls: $(ls)"
     install -m 755 -D --target-directory $out $PWD/${shellInitScript}
     install -m 755 -D --target-directory $out/bin $PWD/${shellInvokeScript}
+    install -m 755 -D --target-directory $out/bin $PWD/${shellCleanScript}
     runHook postInstall
   '';
 
