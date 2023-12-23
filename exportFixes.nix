@@ -1,4 +1,4 @@
-{ lib, shellInit, ... }@inputAttrs:
+{ lib, shellInit, ... }:
 let
   escapeShellArg = lib.strings.escapeShellArg;
 
@@ -53,10 +53,10 @@ let
     };
   };
 
-  prefixEcho = cmd: "echo ${escapeShellArg cmd} ; ${cmd}";
+  echoInto = cmd: "echo ${escapeShellArg cmd} ; ${cmd}";
 
   sdCmd = find: replace:
-    prefixEcho (builtins.concatStringsSep " " [
+    echoInto (builtins.concatStringsSep " " [
       "sd"
       (escapeShellArg find)
       (escapeShellArg replace)
@@ -64,7 +64,7 @@ let
     ]);
   fixCmd = fixAction: label:
     let find_replace = fixAction label;
-    in with find_replace; prefixEcho (sdCmd find replace);
+    in with find_replace; echoInto (sdCmd find replace);
 
   drvAttrs = [
     "__structuredAttrs"
@@ -105,7 +105,6 @@ let
     "NIX_LOG_FD"
     "OLDPWD"
     "TZ"
-    # "SHLVL"
     "PWD"
     "SOURCE_DATE_EPOCH"
     "NIX_SSL_CERT_FILE"

@@ -1,4 +1,4 @@
-{ pkgs, lib, stdenv ? pkgs.stdenvNoCC, extraNativeBuildInputs, ... }:
+{ pkgs, lib, stdenv ? pkgs.stdenvNoCC, extraNativeBuildInputs ? [ ], ... }:
 # mkDevShell is closely based on the structure of mkShell
 # * https://stackoverflow.com/a/71112117/3486684
 {
@@ -13,41 +13,44 @@ let
   # inputAttrs (the inputs to this `mkDevShell` function), 2) all the
   # derivations listed in `inputsFrom`, and 3) all the corresponding buildInputs
   # of these derivations.
-  mergeBuildInputs = buildInputs:
+  mergeBuildInputs = inputs:
     # check if there is an attribute with the same name as `focusSet` in this
     # `mkDevShell's` input attributes; if so, get it, otherwise begin with the
     # empty list
-    (inputAttrs.${buildInputs} or [ ]) ++ (
+    (inputAttrs.${inputs} or [ ]) ++ (
       # lib.subtractLists: subtracts first list from second
       # https://nixos.org/manual/nixpkgs/unstable/
       lib.subtractLists
-      # first list is a list derivations whose build inputs will be included in
-      # the final dev shell's environment.
+      # first list is a list of derivations whose build inputs will be included
+      # in the final dev shell's environment.
       inputsFrom (
         # flattens nested lists into an un-nested one
         lib.flatten
         # remove all buildInputs that are already listed in inputsFrom
-        (lib.catAttrs buildInputs inputsFrom)));
+        (lib.catAttrs inputs inputsFrom)));
 
-  # remove from `attrs` the listed attributes, because they are not required for
-  # use of the shell.
-  overridingAttrs = builtins.removeAttrs inputAttrs [
-    "name"
-    "packages"
-    "inputsFrom"
-    "buildInputs"
-    "nativeBuildInputs"
-    "propagatedBuildInputs"
-    "propagatedNativeBuildInputs"
-    "shellHook"
-  ];
+  unmodifiedAttrs = builtins.removeAttrs inputAttrs
+    # These are the attributes that we will override/merge from `inputAttrs`.
+    [
+      "name"
+      "packages"
+      "inputsFrom"
+      "buildInputs"
+      "nativeBuildInputs"
+      "propagatedBuildInputs"
+      "propagatedNativeBuildInputs"
+      "shellHook"
+    ];
   shellInitScript = "shell-init";
   shellInvokeScript = "${name}-shell";
   shellCleanScript = "${name}-shell-clean";
 
   # Minimal stdenv based on: https://github.com/viperML/mkshell-minimal
-  miniStdEnv = stdenv.override {
-    inherit extraNativeBuildInputs;
+  miniStdEnv = let
+    mergedExtraNativeBuildInputs = [ pkgs.sd ]
+      ++ lib.subtractLists [ pkgs.sd ] extraNativeBuildInputs;
+  in stdenv.override {
+    extraNativeBuildInputs = mergedExtraNativeBuildInputs;
     cc = null;
     preHook = "";
     allowedRequisites = null;
@@ -92,17 +95,23 @@ in miniStdEnv.mkDerivation ({
     echo "${shellInitBody}" >> ${shellInitScript}
     echo "${startShell}" >> ${shellInvokeScript}
     echo "${shellCleanUp}" >> ${shellCleanScript}
+    echo
 
     runHook postBuild
   '';
 
-  installPhase = ''
+  installPhase = let
+    export_dev_env = ./export-dev-env;
+    export_nix_env = ./export-nix-env;
+  in ''
     runHook preInstall
     # echo "PWD: $PWD" echo "out: $out" echo "ls: $(ls)"
     install -m 755 -D --target-directory $out $PWD/${shellInitScript}
     install -m 755 -D --target-directory $out/bin $PWD/${shellInvokeScript}
     install -m 755 -D --target-directory $out/bin $PWD/${shellCleanScript}
+    install -m 755 -D --target-directory $out/bin ${export_dev_env}
+    install -m 755 -D --target-directory $out/bin ${export_nix_env}
     runHook postInstall
   '';
 
-} // overridingAttrs)
+} // unmodifiedAttrs)

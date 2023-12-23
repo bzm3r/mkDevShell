@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+TEST_DIR="$PWD/test"
+zsh -c "source ${RESULT_DIR}/shell-init ; mkdir -p ${TEST_DIR} ; export >> ${TEST_DIR}/dev-shell-export"
