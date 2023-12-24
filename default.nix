@@ -72,45 +72,16 @@ in miniStdEnv.mkDerivation ({
     # buildInputs that go into making up the shell environment
     shellHooks = lib.concatStringsSep "\n"
       (lib.catAttrs "shellHook" (lib.reverseList inputsFrom ++ [ inputAttrs ]));
-    shellInitBody = ''
-      # shell hooks concatenated from build inputs for this shell
-      ${shellHooks}
-      # make cargo home directory, sccache directory, and config.toml
-      ${shellInitialization}
-    '';
-    exportFixes = import ./exportFixes.nix {
-      inherit lib;
-      shellInit = shellInitScript;
-    };
-    startShell = ''
-      #!/usr/bin/env zsh
-      source $out/${shellInitScript} ; zsh -i
-    '';
   in ''
     runHook preBuild
-    echo "exporting vars to shellInit"
-    export >> ${shellInitScript}
-    ${exportFixes}
-
-    echo "${shellInitBody}" >> ${shellInitScript}
-    echo "${startShell}" >> ${shellInvokeScript}
-    echo "${shellCleanUp}" >> ${shellCleanScript}
-    echo
-
+    make_shell build ${shellInitToml}
     runHook postBuild
   '';
 
-  installPhase = let
-    export_dev_env = ./export-dev-env;
-    export_nix_env = ./export-nix-env;
-  in ''
+  installPhase = ''
     runHook preInstall
     # echo "PWD: $PWD" echo "out: $out" echo "ls: $(ls)"
-    install -m 755 -D --target-directory $out $PWD/${shellInitScript}
-    install -m 755 -D --target-directory $out/bin $PWD/${shellInvokeScript}
-    install -m 755 -D --target-directory $out/bin $PWD/${shellCleanScript}
-    install -m 755 -D --target-directory $out/bin ${export_dev_env}
-    install -m 755 -D --target-directory $out/bin ${export_nix_env}
+    make_shell install ${shellInitToml}
     runHook postInstall
   '';
 
