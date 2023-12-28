@@ -13,4 +13,6 @@ bpaf = { version = "0.9.8", features = [
     "bright-color",
     "derive",
 ] }
+heck = "0.4.1"
+toml = "0.8.8"
 xshell = "0.2.5"

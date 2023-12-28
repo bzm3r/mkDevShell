@@ -7,14 +7,16 @@
 # https://github.com/NixOS/nixpkgs/blob/nixos-23.05/pkgs/build-support/mkshell/default.nix
 { pkgs, lib, stdenv, buildEnv, ... }:
 { pkgs, lib,
-# shell names have the form: "family_description"
-shellName,
+# Usually something like "rust" or "haskell"
+shellFamily,
+# Descriptive name or tag that will be underscore-concatenated with shellFamily
+shellTag,
 # where the shell's directories will live is determined in part by this value:
-# `$baseDir/${shellName.family}/${shellName.description}`
+# `$baseDir/${shellFamily}/${shellTag}`
 baseDir,
 # dirs that will be made, and added as env vars
 # structure: { DIR_NAME = String; }
-mkdirs ? { },
+subDirs ? { },
 # files that will be made, and copied to requested path at script start
 # structure: [{ text = String; path = String; }]
 mkfiles ? [ ],
@@ -60,8 +62,8 @@ let
     shell = pkgs.lib.getExe pkgs.bash;
   };
   IN_NIX_SHELL = "impure"; # these custom shells are impure by construction
-  name = "${shellName.family}_${shellName.description}";
-  shellDir = "${baseDir}/${shellName.family}/${shellName.description}";
+  name = "${shellFamily}_${shellTag}";
+  shellDir = "${baseDir}/${shellFamily}/${shellTag}";
   phases = map (x: "${x}Phase") [ "build" "install" ];
 in miniStdEnv.mkDerivation ({
   inherit name meta phases IN_NIX_SHELL;
@@ -78,28 +80,40 @@ in miniStdEnv.mkDerivation ({
     # a concatenation of the various shell hooks that are required by the
     # buildInputs that go into making up the shell environment
     buildToml = ''
-      shell_dir = "${shellDir}"
-      shell_name = "${shellName}"
-      shell_hooks = ${
+      dir = "${shellDir}"
+      family = "${shellFamily}"
+      tag = "${shellTag}"
+      hooks = ${
         tomlMultiLineLiteral (lib.concatStringsSep "\n"
           (lib.catAttrs "shellHook"
             (lib.reverseList useInputsFrom ++ [ inputAttrs ])))
       }
 
-      [mkdirs]
-      ${let toStringNameValue = { name, value }: "${name}=${value}";
-      in builtins.concatStringsSep "\n"
-      (map toStringNameValue (lib.attrsToList mkdirs))}
+      sub_dirs = [
+        ${
+          let
+            toStringNameValue = { name, value }:
+              "{ name = ${name}, value = ${value} }";
+          in builtins.concatStringsSep ''
+            ,
+          '' (map toStringNameValue (lib.attrsToList subDirs))
+        }
+      ]
 
-      [mkfiles]
-      ${let
-        attrSetToString = { contents, path }: ''
-          {
-            contents = ${contents};
-            path = "${path}";
-          }
-        '';
-      in builtins.concatStringsSep "\n" (map attrSetToString mkfiles)}
+      files = [
+        ${
+          let
+            attrSetToString = { contents, path }: ''
+              {
+                contents = ${contents};
+                path = "${path}";
+              }
+            '';
+          in builtins.concatStringsSep ''
+            ,
+          '' (map attrSetToString mkfiles)
+        }
+      ]
     '';
   in ''
     runHook preBuild
