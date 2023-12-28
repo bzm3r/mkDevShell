@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, str::FromStr};
 
 use bpaf::{Bpaf, Parser};
 use xshell::{cmd, Shell};
@@ -13,40 +13,56 @@ pub struct ShellToml {
 #[derive(Debug, Clone)]
 enum Phase {
     /// In the build phase:
-    ///     * will take as input shell_def.toml
-    ///     * will create shell_invoke.toml which:
-    ///         * has the environment variables which need to be invoked
-    Build,
-    Install,
+    ///     * take as input `build.toml`
+    ///     * produce as output: `install.toml`
+    ///
+    /// build.toml has the following format:
+    ///```
+    ///     shell_dir = "${shellDir}"
+    ///     shell_name = "${shellName}"
+    ///     shell_hooks = command-list
+    ///
+    ///     [mkdirs]
+    ///     name=path
+    ///
+    ///     [mkfiles]
+    ///     { content = "..."; path = "..."; }
+    /// ```
+    Build(String),
+    /// In the install phase:
+    ///     * take an `install.toml` as a sequence of commands that will be
+    ///     executed by something `script_exec`
+    ///     * produce as output a series of binaries which will:
+    ///         * invoke the shell
+    ///             * requires: creating necessary directories if they do not
+    ///             exist and initializing necessary environment variables in an
+    ///             exec instance of a zsh shell (in the future, a shell of
+    ///             choice.)
+    ///         * clean up the shell
+    ///             * deleting any directories created by shell invocations
+    Install(String),
+}
+
+impl FromStr for Phase {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> anyhow::Result<Phase> {
+        unimplemented!()
+    }
 }
 
 /// Template Rust CLI script.
 #[derive(Bpaf, Debug, Clone)]
-struct Template {
+struct MakeShell {
     /// Phase for which to execute actions: one of build or install.
     #[bpaf(positional("PHASE"))]
     phase: Phase,
-
-    /// Example of a positional argument.
-    #[bpaf(positional("POSITIONAL"))]
-    shell_toml: String,
-
-    /// Example of an optional argument.
-    #[bpaf(argument("OPTIONAL_ARG"), short, long)]
-    arg: Option<usize>,
-
-    /// Example of a positional argument.
-    #[bpaf(positional("POSITIONAL"))]
-    pos: String,
 }
 
 fn main() -> anyhow::Result<()> {
-    let opts = template().run();
-    let greeting = if opts.opt { "goodbye" } else { "hello" };
-    let thing = opts.pos.repeat(opts.arg.unwrap_or(1));
-    let message = format!("{greeting} {thing}!");
-    let sh = Shell::new()?;
-    cmd!(sh, "echo \"{message}\"").run()?;
+    let opts = make_shell().run();
+    unimplemented!();X
+    // let sh = Shell::new()?;
+    // cmd!(sh, "echo \"{message}\"").run()?;
 
     Ok(())
 }
