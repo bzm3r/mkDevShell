@@ -41,7 +41,7 @@ let
       "propagatedNativeBuildInputs"
       "shellHook"
     ];
-  shellInitScript = "shell-init";
+  shellInitScript = "${name}-shell-init";
   shellInvokeScript = "${name}-shell";
   shellCleanScript = "${name}-shell-clean";
 
@@ -84,7 +84,7 @@ in miniStdEnv.mkDerivation ({
     };
     startShell = ''
       #!/usr/bin/env zsh
-      source $out/${shellInitScript} ; zsh -i
+      source $out/bin/${shellInitScript} ; zsh -i
     '';
   in ''
     runHook preBuild
@@ -106,11 +106,11 @@ in miniStdEnv.mkDerivation ({
   in ''
     runHook preInstall
     # echo "PWD: $PWD" echo "out: $out" echo "ls: $(ls)"
-    install -m 755 -D --target-directory $out $PWD/${shellInitScript}
+    install -m 755 -D --target-directory $out/bin $PWD/${shellInitScript}
     install -m 755 -D --target-directory $out/bin $PWD/${shellInvokeScript}
     install -m 755 -D --target-directory $out/bin $PWD/${shellCleanScript}
-    install -m 755 -D --target-directory $out/bin ${export_dev_env}
-    install -m 755 -D --target-directory $out/bin ${export_nix_env}
+    install -m 755 -D -T ${export_dev_env} $out/bin/${name}-export-dev-env
+    install -m 755 -D -T ${export_nix_env} $out/bin/${name}-export-nix-env
     runHook postInstall
   '';
 
