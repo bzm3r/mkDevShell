@@ -1,4 +1,5 @@
-{ pkgs, lib, stdenv ? pkgs.stdenvNoCC, extraNativeBuildInputs ? [ ], ... }:
+{ pkgs, lib, stdenv ? pkgs.stdenvNoCC, extraNativeBuildInputs ? [ ]
+, writeScriptBin, ... }:
 # mkDevShell is closely based on the structure of mkShell
 # * https://stackoverflow.com/a/71112117/3486684
 {
@@ -88,6 +89,7 @@ in miniStdEnv.mkDerivation ({
     '';
   in ''
     runHook preBuild
+    echo "#!/usr/bin/env bash" >> ${shellInitScript}
     echo "exporting vars to shellInit"
     export >> ${shellInitScript}
     ${exportFixes}
@@ -101,16 +103,31 @@ in miniStdEnv.mkDerivation ({
   '';
 
   installPhase = let
-    export_dev_env = ./export-dev-env;
-    export_nix_env = ./export-nix-env;
+    export_dev_env = ''
+      #!/usr/bin/env bash
+      TEST_DIR="./test"
+      source $out/bin/${shellInitScript}
+      mkdir -p $TEST_DIR
+      export > $TEST_DIR/dev-shell-export
+    '';
+    export_nix_env = ''
+      #!/usr/bin/env bash
+      TEST_DIR="./test"
+      nix-shell --argstr userName bzm3r --argstr name "test-shell" --show-trace --run "mkdir -p $TEST_DIR"
+      export > "$TEST_DIR"/nix-env-export
+    '';
   in ''
     runHook preInstall
     # echo "PWD: $PWD" echo "out: $out" echo "ls: $(ls)"
     install -m 755 -D --target-directory $out/bin $PWD/${shellInitScript}
     install -m 755 -D --target-directory $out/bin $PWD/${shellInvokeScript}
     install -m 755 -D --target-directory $out/bin $PWD/${shellCleanScript}
-    install -m 755 -D -T ${export_dev_env} $out/bin/${name}-export-dev-env
-    install -m 755 -D -T ${export_nix_env} $out/bin/${name}-export-nix-env
+
+    echo "${export_dev_env}" > $out/bin/export_dev_env
+    chmod +x $out/bin/export_dev_env
+
+    echo "${export_nix_env}" > $out/bin/export_nix_env
+    chmod +x $out/bin/export_nix_env
     runHook postInstall
   '';
 

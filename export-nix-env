@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-TEST_DIR="$PWD/test";
-nix-shell --argstr userName bzm3r --argstr name "test-shell" --show-trace --run "mkdir -p ${TEST_DIR}; export >> ${TEST_DIR}/nix-env-export"
